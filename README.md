@@ -32,21 +32,30 @@ Existing phone apps (`gpsdRelay`, `NMEA Send Location`) transmit at fixed interv
 
 The main screen shows the current GPS status (streaming, waiting for fix, idle), live coordinates and altitude, the big START/STOP button, a test send button, and the list of configured destination servers with their send status.
 
+
 ## Download
 
-A pre-built debug APK is available in the root of this repo: [`gps-agent-bridge-v1.0.0-debug.apk`](gps-agent-bridge-v1.0.0-debug.apk) (~18 MB).
+Two signed release builds are available — choose based on your device:
 
-A signed release build with R8 minification is also available: [`gps-agent-bridge-v1.0.0-release.apk`](gps-agent-bridge-v1.0.0-release.apk) (~2 MB).
+| APK | Size | Google Play Services | Best for |
+|-----|------|---------------------|----------|
+| [`gps-agent-bridge-v1.1.0-standard-release.apk`](gps-agent-bridge-v1.1.0-standard-release.apk) | ~2 MB | ✅ Required | Most Android devices (better battery, sensor fusion) |
+| [`gps-agent-bridge-v1.1.0-fdroid-release.apk`](gps-agent-bridge-v1.1.0-fdroid-release.apk) | ~1.5 MB | ❌ Not needed | De-Googled devices (LineageOS, GrapheneOS, F-Droid users) |
+
+**Which one should I use?**
+
+- **Standard** — Uses Google Play Services' FusedLocationProvider for GPS + Wi-Fi + cell + accelerometer sensor fusion. Better battery life (especially when stationary) and faster indoor GPS fixes. Choose this if your phone has Google Play Services (most phones do).
+- **F-Droid** — Uses Android's raw `LocationManager` with no Google dependencies. Fully FLOSS (Free and Libre Open Source Software). Slightly higher battery drain and slower indoor fixes, but works on any Android device. This is the build that will be submitted to F-Droid.
 
 Install via ADB:
 ```bash
-adb install gps-agent-bridge-v1.0.0-release.apk    # signed release (recommended)
-adb install gps-agent-bridge-v1.0.0-debug.apk      # debug build (for development)
+adb install gps-agent-bridge-v1.1.0-standard-release.apk    # with Play Services (recommended)
+adb install gps-agent-bridge-v1.1.0-fdroid-release.apk       # without Play Services (FLOSS)
 ```
 
 Or transfer the file to your phone and install from the file manager.
 
-> ⚠️ This is a debug build signed with a debug key. For production use, build an APK with your own signing key.
+> ⚠️ These are release builds signed with our release key. The F-Droid catalog version will be signed by F-Droid's own key once accepted.
 
 ## Build from source
 
@@ -189,12 +198,24 @@ Based on requirements doc §4.3 estimates. Not yet measured on real hardware —
 
 ## Known limitations
 
-- **No GPS-only mode** — FusedLocationProviderClient requires Google Play Services. If you need LineageOS/GrapheneOS support, file an issue — switching to raw `LocationManager` is straightforward but loses battery efficiency.
+- **No GPS-only mode** — The `fdroid` build flavor uses raw `LocationManager` instead of FusedLocationProvider, providing a FLOSS-compatible build for de-Googled devices. The `standard` flavor requires Google Play Services.
 - **No location history on the phone** — The desktop's `location-history.jsonl` is the source of truth; this app is purely a sensor.
-- **Debug APK only** — No release signing configuration yet. Build your own release APK for production.
+- **Release builds available** — Both standard and fdroid release APKs are provided, signed with our release key.
 - **StreamingStateHolder is a singleton** — Works because foreground service and UI share a process. If the service were ever moved to a separate process (unlikely), this would need to become a proper service binder.
 
 ## Changelog
+
+### v1.1.0 (2026-06-25)
+
+F-Droid compatibility with dual build flavors:
+- Added `standard` flavor (with Google Play Services / FusedLocationProvider) and `fdroid` flavor (raw LocationManager, no Google dependencies)
+- `LocationEngine` refactored from concrete class to interface with two implementations
+- `FusedLocationEngine` (standard) — sensor fusion, better battery, faster indoor fixes
+- `RawLocationEngine` (fdroid) — pure Android LocationManager, fully FLOSS
+- Flavor-specific Hilt modules for dependency injection
+- Both APKs signed with release key, R8 minified
+- Standard: ~2 MB, F-Droid: ~1.5 MB
+- Updated README with dual APK download table and explanation
 
 ### v1.0.0 (2026-06-25)
 
