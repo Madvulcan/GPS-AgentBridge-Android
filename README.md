@@ -36,9 +36,12 @@ The main screen shows the current GPS status (streaming, waiting for fix, idle),
 
 A pre-built debug APK is available in the root of this repo: [`gps-agent-bridge-v1.0.0-debug.apk`](gps-agent-bridge-v1.0.0-debug.apk) (~18 MB).
 
+A signed release build with R8 minification is also available: [`gps-agent-bridge-v1.0.0-release.apk`](gps-agent-bridge-v1.0.0-release.apk) (~2 MB).
+
 Install via ADB:
 ```bash
-adb install gps-agent-bridge-v1.0.0-debug.apk
+adb install gps-agent-bridge-v1.0.0-release.apk    # signed release (recommended)
+adb install gps-agent-bridge-v1.0.0-debug.apk      # debug build (for development)
 ```
 
 Or transfer the file to your phone and install from the file manager.
