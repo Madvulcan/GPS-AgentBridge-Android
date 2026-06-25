@@ -1,0 +1,218 @@
+# GPS AgentBridge Android
+
+**Distance-based GPS relay for the [gps-agent-bridge](https://github.com/Madvulcan/gps-agent-bridge) desktop project.** Transmits NMEA 0183 (GGA + GSA + RMC) via UDP only when you've moved beyond a configurable threshold — saving battery versus fixed-interval polling.
+
+**Companion app to [gps-agent-bridge](https://github.com/Madvulcan/gps-agent-bridge)** — the desktop side receives the NMEA data via `gpsd`, powers location-aware agent scripts, reverse geocoding, place search, and history logging.
+
+## How it works
+
+```
+┌─────────────────┐     UDP NMEA     ┌─────────────────┐     JSON      ┌──────────┐
+│  Android App    │ ──────────────► │  Linux Desktop   │ ──────────► │  Agent    │
+│  (this repo)    │   port 2948     │  (gpsd daemon)   │   port 2947  │          │
+└─────────────────┘                  └─────────────────┘              └──────────┘
+```
+
+Existing phone apps (`gpsdRelay`, `NMEA Send Location`) transmit at fixed intervals regardless of movement — this app replaces them with a **distance-triggered model**:
+
+- **Internal polling** every ~30 seconds via FusedLocationProviderClient (system-managed, battery-efficient)
+- **Network transmission** only when:
+  - distance from last transmission ≥ threshold (default 500 m), **OR**
+  - max interval elapsed (default 10 min, as a safety net)
+- **Accuracy gate** — fixes worse than `minAccuracy` (default 20 m) are rejected before any logic runs
+- **First fix always transmits** — you get data immediately after starting
+- **Multi-target** — send to multiple desktop gpsd instances for redundancy
+- **Dry-run mode** — exercise the engine without actually transmitting (for testing)
+- **Auto-start on boot** (optional)
+- **Battery optimization onboarding** — walks the user through disabling battery optimization, which is the #1 cause of streaming interruptions
+
+## Screenshots
+
+> *Coming soon — the app uses Material 3 with a clean single-screen interface: status card, START/STOP button, test send, and target list.*
+
+## Download
+
+A pre-built debug APK is available in the root of this repo: [`gps-agent-bridge-debug.apk`](gps-agent-bridge-debug.apk) (~18 MB).
+
+Install via ADB:
+```bash
+adb install gps-agent-bridge-debug.apk
+```
+
+Or transfer the file to your phone and install from the file manager.
+
+> ⚠️ This is a debug build signed with a debug key. For production use, build a release APK with your own signing key.
+
+## Build from source
+
+### Prerequisites
+
+- Android Studio Ladybug (2024.2) or newer
+- JDK 17
+- Android SDK with compileSdk 35 (Android 15), minSdk 26 (Android 8.0)
+- Physical Android device running 8.0+ for testing (emulators don't have real GPS)
+
+### First-time setup
+
+The `gradle-wrapper.jar` is not included in the repo (binary files in git). Regenerate it:
+
+```bash
+gradle wrapper --gradle-version 8.10.2
+```
+
+Or open the project in Android Studio — it will offer to generate the wrapper on first sync.
+
+### Build the debug APK
+
+```bash
+./gradlew :app:assembleDebug
+```
+
+Output: `app/build/outputs/apk/debug/app-debug.apk` (~18 MB)
+
+### Run unit tests
+
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+22 tests covering NMEA sentence formatting, checksum correctness, and transmission engine logic (distance/interval triggers, accuracy gate, dry-run mode, multi-target tracking).
+
+### Install on a device
+
+```bash
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+## End-to-end test with the desktop
+
+1. Make sure `gpsd` is running on the desktop and listening on UDP 2948:
+   ```bash
+   ss -ulnp | grep 2948
+   ```
+
+2. Find the desktop's IP (Tailscale or LAN):
+   ```bash
+   tailscale ip -4    # Tailscale (recommended — works over any network)
+   hostname -I        # LAN
+   ```
+
+3. Open GPS AgentBridge on the phone.
+4. Walk through onboarding (location permission → battery optimization).
+5. Settings → Destination servers → add `<desktop-ip>:2948`.
+6. Tap **START**.
+7. Verify on the desktop:
+   ```bash
+   gpsloc --human    # should show your phone's coordinates
+   ```
+
+**Troubleshooting:**
+- If the phone shows "Waiting for GPS fix" — go outside or near a window. Cold-start GPS lock takes 30-60s.
+- Try **Test send** from the main screen — sends a dummy packet to verify the network path independently of GPS.
+- If test send works but real streaming doesn't, check that **min accuracy** isn't set too tight for your environment (indoor GPS often has 30-100m accuracy; raise it to 200m).
+- If nothing reaches the desktop — check firewall rules. The desktop needs UDP 2948 open from the phone's IP range.
+
+## Project structure
+
+```
+app/src/main/
+├── AndroidManifest.xml
+├── kotlin/com/madvulcan/gpsagentbridge/
+│   ├── App.kt                          — @HiltAndroidApp entry, notification channel
+│   ├── MainActivity.kt                 — single-activity host for Compose navigation
+│   ├── data/                           — Settings, ServerTarget, DataStore-backed repo
+│   ├── nmea/NmeaGenerator.kt           — pure Kotlin, GGA+GSA+RMC + checksum
+│   ├── net/UdpSender.kt                — fire-and-forget UDP, multi-target parallel send
+│   ├── location/
+│   │   ├── LocationEngine.kt           — FusedLocationProviderClient → Flow<GpsFix>
+│   │   ├── TransmissionEngine.kt       — distance/interval logic + state machine
+│   │   └── StreamingStateHolder.kt     — process-wide bridge from service → UI
+│   ├── service/GpsStreamingService.kt  — foreground service (type: location), wake lock
+│   ├── boot/BootReceiver.kt            — auto-start on BOOT_COMPLETED
+│   ├── di/AppModule.kt                 — Hilt singleton module
+│   ├── ui/
+│   │   ├── AppNavigation.kt            — NavHost routes (main, settings, onboarding, about)
+│   │   ├── StreamingViewModel.kt       — shared state for main + onboarding
+│   │   ├── theme/                      — Material 3 colors + typography
+│   │   └── screens/
+│   │       ├── MainScreen.kt           — status card + START/STOP + test send + targets
+│   │       ├── SettingsScreen.kt       — target editor + sliders + toggles
+│   │       ├── OnboardingScreen.kt     — location + battery opt-out flow
+│   │       └── AboutScreen.kt          — version + project description
+│   └── util/
+│       ├── PermissionHelper.kt         — location + background location helpers
+│       └── BatteryOptimizationHelper.kt — battery opt-out intent + check
+└── res/                                — strings, colors, themes, launcher icon
+```
+
+## Design decisions
+
+| Area | Choice | Why |
+|---|---|---|
+| UI framework | Jetpack Compose | ~40% less code than XML layouts, modern Android default |
+| Location source | FusedLocationProviderClient | Fuses GPS + Wi-Fi + cell + accelerometer; significantly lower battery than raw LocationManager, especially when stationary |
+| Persistence | Preferences DataStore | Official successor to SharedPreferences; safer concurrent-write semantics |
+| NMEA sentences | GGA + GSA + RMC | Covers gpsd's needs; GSA gives DOP for free. GSV skipped — bulky and rarely changes |
+| Talker ID | `GP` (GPS-only) | Maximum gpsd compatibility. `GN` also accepted but `GP` is the safer default |
+| Per-transmission datagram | Single UDP packet (3 sentences joined with `\r\n`) | One packet per event — efficient and atomic |
+| DI | Hilt | Standard Android DI, KSP-compiled, works with Compose ViewModels out of the box |
+| Max interval default | 10 min | Desktop's `location-updater` reads every 30s; 10 min is sufficient for the agent's use cases while saving battery |
+| State bridge | StreamingStateHolder singleton | Works because Android keeps foreground service and UI in the same process. Simple and correct for this use case |
+| Distance calculation | Pure-Kotlin haversine | No Android dependency — makes the engine fully unit-testable without mocking |
+
+## Battery expectations
+
+| Scenario | Fixed-interval apps (60s) | This app (distance-based) |
+|---|---|---|
+| Stationary (desk, overnight) | ~2-5%/hour | <0.2%/hour |
+| Light movement (walking) | ~2-5%/hour | ~0.5-1%/hour |
+| Driving | ~2-5%/hour | ~1-2%/hour |
+
+Based on requirements doc §4.3 estimates. Not yet measured on real hardware — contributions welcome.
+
+## Settings reference
+
+| Setting | Default | Description |
+|---|---|---|
+| Distance threshold | 500 m | How far you must move before a transmission fires |
+| Max interval | 10 min | Transmit even if you haven't moved (safety net) |
+| Min accuracy | 20 m | Reject fixes with worse accuracy (prevents garbage data) |
+| Dry run | Off | Run the engine without actually sending UDP packets |
+| Detailed notification | Off | Show coordinates in the persistent notification |
+| Auto-start on boot | Off | Start streaming automatically when the phone reboots |
+| Destination servers | (none) | One or more `host:port` pairs for UDP NMEA transmission |
+
+## Known limitations
+
+- **No GPS-only mode** — FusedLocationProviderClient requires Google Play Services. If you need LineageOS/GrapheneOS support, file an issue — switching to raw `LocationManager` is straightforward but loses battery efficiency.
+- **No location history on the phone** — The desktop's `location-history.jsonl` is the source of truth; this app is purely a sensor.
+- **Debug APK only** — No release signing configuration yet. Build your own release APK for production.
+- **StreamingStateHolder is a singleton** — Works because foreground service and UI share a process. If the service were ever moved to a separate process (unlikely), this would need to become a proper service binder.
+
+## Changelog
+
+### v0.1 (2026-06-24)
+
+Initial release with core functionality:
+- Distance-based NMEA relay via UDP
+- FusedLocationProviderClient with 30s internal polling
+- Multi-target support
+- Compose UI with onboarding flow
+- Foreground service with battery optimization onboarding
+- 22 unit tests passing
+
+### v0.1.1 (2026-06-25)
+
+Bug fixes from first real-device testing:
+- Fixed GpsStreamingService crash (engine initialized before Hilt injection → moved to `onCreate()`)
+- Fixed NMEA lat/lon format string (`%09.4f` → `%07.4f` per NMEA 0183 spec)
+- Fixed NMEA test checksum expected value
+- Replaced `Location.distanceBetween()` with pure-Kotlin haversine (unit-testable)
+- Added `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission (onboarding button now works)
+- Fixed StreamingViewModel shadow engine clobbering service UI state
+- Fixed `Icons.Filled.Send` deprecation → `Icons.AutoMirrored.Filled.Send`
+- End-to-end verified: OnePlus 12 → Tailscale → desktop gpsd (lat=35.98°N, lon=83.92°W, 3D fix, 8 sats)
+
+## License
+
+MIT — see [LICENSE](LICENSE). Matches the [desktop repo](https://github.com/Madvulcan/gps-agent-bridge).

@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS AgentBridge</string>
+
+    <!-- Main screen -->
+    <string name="status_idle">Idle</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_waiting_for_fix">Waiting for GPS fix…</string>
+    <string name="status_tracking">Streaming</string>
+    <string name="status_error">Error</string>
+
+    <string name="action_start">START</string>
+    <string name="action_stop">STOP</string>
+    <string name="action_test_send">Test send</string>
+    <string name="action_open_settings">Settings</string>
+
+    <!-- Main screen labels -->
+    <string name="label_coords">Coords</string>
+    <string name="label_altitude">Altitude</string>
+    <string name="label_accuracy">Accuracy</string>
+    <string name="label_last_tx">Last tx</string>
+    <string name="label_distance_moved">Distance moved</string>
+    <string name="label_today">Today</string>
+    <string name="label_fixes_rejected">Fixes rejected (accuracy)</string>
+    <string name="label_targets">Targets</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_targets">Destination servers</string>
+    <string name="settings_section_behavior">Behavior</string>
+    <string name="settings_section_notifications">Notifications</string>
+    <string name="settings_section_system">System</string>
+
+    <string name="settings_add_target">Add server</string>
+    <string name="settings_target_host">Host</string>
+    <string name="settings_target_port">Port</string>
+    <string name="settings_target_label">Label (optional)</string>
+
+    <string name="settings_distance_threshold">Distance threshold (meters)</string>
+    <string name="settings_max_interval">Max interval (minutes)</string>
+    <string name="settings_min_accuracy">Minimum GPS accuracy (meters)</string>
+    <string name="settings_dry_run">Dry run (don\'t actually transmit)</string>
+
+    <string name="settings_detailed_notification">Detailed notification (show live coords)</string>
+    <string name="settings_autostart_boot">Auto-start streaming on device boot</string>
+
+    <string name="settings_about">About</string>
+
+    <!-- About screen -->
+    <string name="about_title">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_description">Distance-based GPS relay for gpsd. Transmits NMEA 0183 (GGA, GSA, RMC) via UDP only when you\'ve moved beyond a configurable threshold — saving battery versus fixed-interval polling.</string>
+    <string name="about_companion">Companion app for the gps-agent-bridge desktop project.</string>
+    <string name="about_license">License: MIT</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_title">Setup</string>
+    <string name="onboarding_step_location">Grant location access</string>
+    <string name="onboarding_step_location_desc">Required to read GPS position. Choose \"Allow all the time\" when prompted.</string>
+    <string name="onboarding_step_battery">Disable battery optimization</string>
+    <string name="onboarding_step_battery_desc">Android will otherwise kill the app in the background and GPS streaming will stop. This is the #1 issue users encounter.</string>
+    <string name="onboarding_step_done">You\'re ready</string>
+    <string name="onboarding_step_done_desc">Tap finish to return to the main screen and press START.</string>
+
+    <!-- Foreground service notification -->
+    <string name="notif_channel_id">streaming</string>
+    <string name="notif_channel_name">GPS streaming</string>
+    <string name="notif_channel_desc">Persistent notification required to keep GPS streaming active in the background.</string>
+    <string name="notif_title_idle">GPS AgentBridge — idle</string>
+    <string name="notif_title_waiting">Waiting for GPS fix…</string>
+    <string name="notif_title_streaming">Streaming GPS</string>
+    <string name="notif_text_streaming">%1$.5f, %2$.5f • last tx %3$s</string>
+    <string name="notif_text_default">Tap to open</string>
+
+    <!-- Warnings -->
+    <string name="warning_background_location">Location permission is \"while in use only\". Background streaming will fail. Tap to fix.</string>
+    <string name="warning_battery_optimization">Battery optimization is on. Android will kill this app in the background. Tap to fix.</string>
+    <string name="warning_no_targets">No destination servers configured. Add one in Settings.</string>
+    <string name="warning_no_location_permission">Location permission not granted. Streaming cannot start.</string>
+
+    <!-- Misc -->
+    <string name="ok">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="add">Add</string>
+    <string name="never">never</string>
+    <string name="just_now">just now</string>
+    <string name="minutes_ago">%1$d min ago</string>
+    <string name="seconds_ago">%1$d sec ago</string>
+</resources>
