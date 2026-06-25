@@ -43,7 +43,7 @@ adb install gps-agent-bridge-v1.0.0-debug.apk
 
 Or transfer the file to your phone and install from the file manager.
 
-> ⚠️ This is a debug build signed with a debug key. For production use, build a release APK with your own signing key.
+> ⚠️ This is a debug build signed with a debug key. For production use, build an APK with your own signing key.
 
 ## Build from source
 
