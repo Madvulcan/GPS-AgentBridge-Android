@@ -28,15 +28,17 @@ Existing phone apps (`gpsdRelay`, `NMEA Send Location`) transmit at fixed interv
 
 ## Screenshots
 
-> *Coming soon — the app uses Material 3 with a clean single-screen interface: status card, START/STOP button, test send, and target list.*
+<img src="docs/screenshot-main.png" width="300" alt="Main screen showing streaming status, coordinates, and target list">
+
+The main screen shows the current GPS status (streaming, waiting for fix, idle), live coordinates and altitude, the big START/STOP button, a test send button, and the list of configured destination servers with their send status.
 
 ## Download
 
-A pre-built debug APK is available in the root of this repo: [`gps-agent-bridge-debug.apk`](gps-agent-bridge-debug.apk) (~18 MB).
+A pre-built debug APK is available in the root of this repo: [`gps-agent-bridge-v1.0.0-debug.apk`](gps-agent-bridge-v1.0.0-debug.apk) (~18 MB).
 
 Install via ADB:
 ```bash
-adb install gps-agent-bridge-debug.apk
+adb install gps-agent-bridge-v1.0.0-debug.apk
 ```
 
 Or transfer the file to your phone and install from the file manager.
@@ -191,27 +193,20 @@ Based on requirements doc §4.3 estimates. Not yet measured on real hardware —
 
 ## Changelog
 
-### v0.1 (2026-06-24)
+### v1.0.0 (2026-06-25)
 
-Initial release with core functionality:
-- Distance-based NMEA relay via UDP
+First public release — fully functional distance-based GPS relay:
+- Distance-based NMEA relay via UDP to one or more gpsd targets
 - FusedLocationProviderClient with 30s internal polling
-- Multi-target support
-- Compose UI with onboarding flow
-- Foreground service with battery optimization onboarding
-- 22 unit tests passing
-
-### v0.1.1 (2026-06-25)
-
-Bug fixes from first real-device testing:
-- Fixed GpsStreamingService crash (engine initialized before Hilt injection → moved to `onCreate()`)
-- Fixed NMEA lat/lon format string (`%09.4f` → `%07.4f` per NMEA 0183 spec)
-- Fixed NMEA test checksum expected value
-- Replaced `Location.distanceBetween()` with pure-Kotlin haversine (unit-testable)
-- Added `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission (onboarding button now works)
-- Fixed StreamingViewModel shadow engine clobbering service UI state
-- Fixed `Icons.Filled.Send` deprecation → `Icons.AutoMirrored.Filled.Send`
-- End-to-end verified: OnePlus 12 → Tailscale → desktop gpsd (lat=35.98°N, lon=83.92°W, 3D fix, 8 sats)
+- Configurable distance threshold, max interval, and min accuracy
+- Multi-target support with per-target success/failure tracking
+- Material 3 Compose UI with status card, START/STOP, test send
+- Onboarding flow (location permission + battery optimization)
+- Foreground service with persistent notification
+- Auto-start on boot (optional)
+- Dry-run mode for testing without network transmission
+- 22 unit tests passing (NMEA generator + transmission engine)
+- End-to-end verified: phone → Tailscale VPN → desktop gpsd
 
 ## License
 
