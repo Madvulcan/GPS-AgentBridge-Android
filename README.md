@@ -45,8 +45,8 @@ Two signed release builds are available — choose based on your device:
 
 | APK | Size | Google Play Services | Best for |
 |-----|------|---------------------|----------|
-| [`gps-agent-bridge-v1.1.0-standard-release.apk`](gps-agent-bridge-v1.1.0-standard-release.apk) | ~2 MB | ✅ Required | Most Android devices (better battery, sensor fusion) |
-| [`gps-agent-bridge-v1.1.0-fdroid-release.apk`](gps-agent-bridge-v1.1.0-fdroid-release.apk) | ~1.5 MB | ❌ Not needed | De-Googled devices (LineageOS, GrapheneOS, F-Droid users) |
+| [`gps-agent-bridge-v1.2.0-standard-release.apk`](gps-agent-bridge-v1.2.0-standard-release.apk) | ~2 MB | ✅ Required | Most Android devices (better battery, sensor fusion) |
+| [`gps-agent-bridge-v1.2.0-fdroid-release.apk`](gps-agent-bridge-v1.2.0-fdroid-release.apk) | ~1.5 MB | ❌ Not needed | De-Googled devices (LineageOS, GrapheneOS, F-Droid users) |
 
 **Which one should I use?**
 
@@ -55,8 +55,8 @@ Two signed release builds are available — choose based on your device:
 
 Install via ADB:
 ```bash
-adb install gps-agent-bridge-v1.1.0-standard-release.apk    # with Play Services (recommended)
-adb install gps-agent-bridge-v1.1.0-fdroid-release.apk       # without Play Services (FLOSS)
+adb install gps-agent-bridge-v1.2.0-standard-release.apk    # with Play Services (recommended)
+adb install gps-agent-bridge-v1.2.0-fdroid-release.apk       # without Play Services (FLOSS)
 ```
 
 Or transfer the file to your phone and install from the file manager.
@@ -225,6 +225,16 @@ Based on estimates — not yet measured on real hardware. Contributions welcome.
 - **StreamingStateHolder is a singleton** — Works because Android keeps foreground service and UI in the same process. If the service were ever moved to a separate process (unlikely), this would need to become a proper service binder.
 
 ## Changelog
+
+### v1.2.0 (2026-06-25)
+
+Battery optimization with adaptive GPS polling:
+- **Adaptive polling interval** — When stationary (all recent fixes within 5m), GPS polling gradually backs off from 30s → 2min → 5min. On movement, snaps back to 30s immediately. Reduces GPS radio duty cycle by 3-5x when stationary — the single biggest battery improvement available.
+- **Screen-off throttle** — When the phone screen is off for >2 minutes, GPS polling slows to 5min intervals. Screen on → snaps back to active polling. Catches the common case of pocketing your phone while streaming.
+- **AdaptivePollingController** — New component that combines movement detection and screen state to dynamically adjust the `LocationEngine` polling interval. The service restarts location collection whenever the interval changes.
+- **ScreenStateReceiver** — New broadcast receiver for `ACTION_SCREEN_ON`/`ACTION_SCREEN_OFF`, registered dynamically during streaming only.
+- **LocationEngine.updateInterval()** — New interface method allowing dynamic interval changes without recreating the engine.
+- Both standard and fdroid flavors rebuilt with adaptive polling support.
 
 ### v1.1.0 (2026-06-25)
 
