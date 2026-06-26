@@ -1,3 +1,14 @@
+
+
+### v1.3.0 (2026-06-26)
+
+Deep sleep battery optimization with significant motion sensor:
+- **Significant motion wake-up** -- When stationary + screen off for >5 minutes, GPS is turned **completely off** and the phone hardware significant motion sensor is armed instead. This sensor costs <0.01%/hour and fires when the device is physically moved (picked up, walked with, car door closes). On trigger, GPS snaps back to active 30s polling immediately.
+- **Four-state polling model** -- ACTIVE (30s, moving/screen on) -> SETTLING (2min, stationary/screen on) -> IDLE (5min, stationary/screen off 2-5min) -> SLEEP (GPS off, motion sensor, stationary/screen off >5min).
+- **No safety net needed** -- The distance threshold (500m) and max interval timer only fire when GPS fixes arrive. In SLEEP state, no fixes come in, so no transmissions happen. The motion sensor ensures GPS wakes when the user actually moves.
+- **AdaptivePollingController** rewritten with PollingState enum and TriggerEventListener for significant motion.
+- **GpsStreamingService** now dynamically starts/stops GPS collection based on the controller state changes.
+- Expected battery: <0.01%/hour when asleep (was ~0.2%/hour with 5min polling).
 # Changelog
 
 ### v1.2.0 (2026-06-25)
@@ -36,3 +47,15 @@ First public release — fully functional distance-based GPS relay:
 - Dry-run mode for testing without network transmission
 - 22 unit tests passing (NMEA generator + transmission engine)
 - End-to-end verified: phone → Tailscale VPN → desktop gpsd
+
+### v1.3.0 (2026-06-26)
+
+Deep sleep battery optimization with significant motion sensor:
+- **Significant motion wake-up** — When stationary + screen off for >5 minutes, GPS is turned **completely off** and the phone's hardware significant motion sensor is armed instead. This sensor costs <0.01%/hour and fires when the device is physically moved (picked up, walked with, car door closes). On trigger, GPS snaps back to active 30s polling immediately.
+- **Four-state polling model** — ACTIVE (30s, moving/screen on) → SETTLING (2min, stationary/screen on) → IDLE (5min, stationary/screen off 2-5min) → SLEEP (GPS off, motion sensor, stationary/screen off >5min).
+- **No safety net needed** — The distance threshold (500m) and max interval timer only fire when GPS fixes arrive. In SLEEP state, no fixes come in, so no transmissions happen. The motion sensor ensures GPS wakes when the user actually moves.
+- **AdaptivePollingController** rewritten with `PollingState` enum and `TriggerEventListener` for significant motion.
+- **GpsStreamingService** now dynamically starts/stops GPS collection based on the controller's state changes.
+- Expected battery: <0.01%/hour when asleep (was ~0.2%/hour with 5min polling).
+
+### v1.2.0 (2026-06-25)

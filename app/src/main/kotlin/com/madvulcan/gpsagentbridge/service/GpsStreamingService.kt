@@ -47,11 +47,28 @@ class GpsStreamingService : Service() {
     private var streamingJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var screenReceiver: ScreenStateReceiver? = null
+    private var isGpsStreaming = false
 
     override fun onCreate() {
         super.onCreate()
         engine = TransmissionEngine(sender = udpSender)
         adaptiveController = AdaptivePollingController(this)
+        adaptiveController.onStateChanged = { newState ->
+            if (newState.isGpsOff) {
+                Log.d(TAG, "Entering SLEEP — stopping GPS, motion sensor armed")
+                stopLocationStream()
+                isGpsStreaming = false
+            } else if (!isGpsStreaming) {
+                Log.d(TAG, "Waking up — restarting GPS at ${newState.intervalMillis / 1000}s")
+                locationEngine.updateInterval(newState.intervalMillis)
+                startLocationStream()
+                isGpsStreaming = true
+            } else {
+                Log.d(TAG, "Adaptive polling: interval = ${newState.intervalMillis / 1000}s")
+                locationEngine.updateInterval(newState.intervalMillis)
+                restartLocationStream()
+            }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -98,16 +115,17 @@ class GpsStreamingService : Service() {
             }
         }
 
-        // Watch adaptive polling interval → restart location collection on change
+        // Watch adaptive controller state changes
         scope.launch {
-            adaptiveController.desiredInterval.collectLatest { interval ->
-                locationEngine.updateInterval(interval)
-                Log.d(TAG, "Adaptive polling: interval = ${interval / 1000}s")
-                restartLocationStream()
+            adaptiveController.state.collectLatest { state ->
+                // State change callback already handles GPS start/stop
+                // This collect keeps the service aware of the current state
+                Log.d(TAG, "Polling state: $state")
             }
         }
 
         startLocationStream()
+        isGpsStreaming = true
     }
 
     private fun startLocationStream() {
@@ -126,19 +144,24 @@ class GpsStreamingService : Service() {
         }
     }
 
-    private fun restartLocationStream() {
+    private fun stopLocationStream() {
         streamingJob?.cancel()
         streamingJob = null
+    }
+
+    private fun restartLocationStream() {
+        stopLocationStream()
         startLocationStream()
     }
 
     private fun stopStreaming() {
-        streamingJob?.cancel()
-        streamingJob = null
+        stopLocationStream()
+        isGpsStreaming = false
         engine.stop()
         StreamingStateHolder.unbind()
         releaseWakeLock()
         unregisterScreenReceiver()
+        adaptiveController.shutdown()
         udpSender.close()
         getSystemService(NotificationManager::class.java)?.cancel(NOTIF_ID)
     }
@@ -154,11 +177,21 @@ class GpsStreamingService : Service() {
     private fun registerScreenReceiver() {
         if (screenReceiver != null) return
         screenReceiver = ScreenStateReceiver { isOn ->
-            val intervalChanged = adaptiveController.onScreenStateChanged(isOn)
-            if (intervalChanged) {
-                locationEngine.updateInterval(adaptiveController.desiredInterval.value)
-                restartLocationStream()
-                Log.d(TAG, "Screen ${if (isOn) "on" else "off"}: interval -> ${adaptiveController.desiredInterval.value / 1000}s")
+            val stateChanged = adaptiveController.onScreenStateChanged(isOn)
+            if (stateChanged) {
+                val newState = adaptiveController.state.value
+                if (newState.isGpsOff) {
+                    stopLocationStream()
+                    isGpsStreaming = false
+                } else if (!isGpsStreaming) {
+                    locationEngine.updateInterval(newState.intervalMillis)
+                    startLocationStream()
+                    isGpsStreaming = true
+                } else {
+                    locationEngine.updateInterval(newState.intervalMillis)
+                    restartLocationStream()
+                }
+                Log.d(TAG, "Screen ${if (isOn) "on" else "off"}: state -> $newState")
             }
         }
         registerReceiver(screenReceiver, ScreenStateReceiver.filter())

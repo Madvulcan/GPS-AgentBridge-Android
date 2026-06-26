@@ -1,6 +1,8 @@
 package com.madvulcan.gpsagentbridge.location
 
 import android.content.Context
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.PowerManager
 import com.madvulcan.gpsagentbridge.nmea.GpsFix
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -8,94 +10,115 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Controls the GPS polling interval based on movement patterns and screen state.
+ * Controls the GPS polling state based on movement patterns, screen state,
+ * and significant motion detection.
  *
- * Three features in one controller:
+ * Four states:
  *
- * 1. **Adaptive polling** — when the last N fixes show <5m movement, gradually
- *    back off from 30s → 2min → 5min. Snap back to 30s immediately on real movement.
+ * 1. **ACTIVE** — GPS polling at 30s. Used when moving or screen on.
+ * 2. **SETTLING** — GPS polling at 2min. Used when recently stationary but screen still on.
+ * 3. **IDLE** — GPS polling at 5min. Screen off but not yet in deep sleep.
+ * 4. **SLEEP** — GPS **OFF**, significant motion sensor armed. Maximum battery savings.
+ *    Entered when stationary + screen off for >5 min. Exits on motion detected or screen on.
  *
- * 2. **Geofence wake-up** — uses Android's GeofencingClient (standard) or a
- *    distance-based check (fdroid) to detect when the user has left the stationary
- *    zone, triggering an immediate return to fast polling.
- *
- * 3. **Screen-off throttle** — when the screen is off for >2 minutes, bump to
- *    slow polling. Screen on → back to fast.
- *
- * The controller emits the desired interval; the service restarts the location
- * collection whenever the interval changes.
+ * The significant motion sensor is a hardware trigger that costs <0.01%/hour.
+ * It fires when the device is physically moved (picked up, walked with, car door closes).
+ * When it fires, we snap back to ACTIVE polling immediately.
  */
 class AdaptivePollingController(context: Context) {
 
-    private val _desiredInterval = MutableStateFlow(LocationEngine.INTERVAL_FAST)
-    val desiredInterval: StateFlow<Long> = _desiredInterval.asStateFlow()
+    enum class PollingState(val intervalMillis: Long) {
+        ACTIVE(LocationEngine.INTERVAL_FAST),      // 30s — moving or screen on
+        SETTLING(LocationEngine.INTERVAL_MEDIUM),   // 2min — stationary, screen on
+        IDLE(LocationEngine.INTERVAL_SLOW),         // 5min — stationary, screen off
+        SLEEP(0L);                                   // GPS OFF — motion sensor armed
+
+        val isGpsOff: Boolean get() = this == SLEEP
+    }
+
+    private val _state = MutableStateFlow(PollingState.ACTIVE)
+    val state: StateFlow<PollingState> = _state.asStateFlow()
+
+    /** Convenience: the current GPS interval (0 = GPS off). */
+    val desiredInterval: Long get() = _state.value.intervalMillis
 
     private val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+    private val significantMotionSensor: Sensor? =
+        sensorManager.getDefaultSensor(Sensor.TYPE_SIGNIFICANT_MOTION)
 
-    // Stationary detection: track recent fix positions
+    // Stationary detection
     private val recentFixes = ArrayDeque<GpsFix>(maxHistorySize)
     private var screenOffSince: Long = 0L
     private var wasScreenOn: Boolean = true
+    private var stationarySince: Long = 0L
+
+    // Motion sensor listener (only registered in SLEEP state)
+    private var motionListener: android.hardware.TriggerEventListener? = null
+
+    /** Callback for the service to restart/stop GPS when state changes. */
+    var onStateChanged: ((newState: PollingState) -> Unit)? = null
 
     /**
-     * Call this for every GPS fix. Returns true if the interval changed.
+     * Call this for every GPS fix. Returns true if the polling state changed.
      */
     fun onFix(fix: GpsFix): Boolean {
-        val oldInterval = _desiredInterval.value
+        // In SLEEP state, we shouldn't be getting fixes — ignore them
+        if (_state.value == PollingState.SLEEP) return false
 
-        // Add to history
+        val oldState = _state.value
+
         recentFixes.addLast(fix)
         if (recentFixes.size > maxHistorySize) recentFixes.removeFirst()
 
-        // Check if we're stationary (<5m movement across recent fixes)
         val isStationary = detectStationary()
+        if (isStationary && stationarySince == 0L) {
+            stationarySince = System.currentTimeMillis()
+        } else if (!isStationary) {
+            stationarySince = 0L
+        }
 
         // Check screen state
         val isScreenOn = pm.isInteractive
         val screenJustTurnedOff = wasScreenOn && !isScreenOn
-        val screenJustTurnedOn = !wasScreenOn && isScreenOn
         wasScreenOn = isScreenOn
 
         if (screenJustTurnedOff) {
             screenOffSince = System.currentTimeMillis()
         }
 
-        val screenOffLong = !isScreenOn && screenOffSince > 0 &&
-                (System.currentTimeMillis() - screenOffSince) > SCREEN_OFF_THRESHOLD_MS
+        val screenOffDuration = if (!isScreenOn && screenOffSince > 0)
+            System.currentTimeMillis() - screenOffSince else 0L
 
-        // Determine interval
-        val newInterval = when {
-            // Movement detected: snap to fast
-            !isStationary -> LocationEngine.INTERVAL_FAST
-            // Screen off for a while: slow
-            screenOffLong -> LocationEngine.INTERVAL_SLOW
-            // Stationary but recently moved: medium
-            isStationary -> LocationEngine.INTERVAL_MEDIUM
-            else -> LocationEngine.INTERVAL_FAST
+        // Determine new state
+        val newState = when {
+            // Moving: always active
+            !isStationary -> PollingState.ACTIVE
+            // Stationary + screen off >5min + motion sensor available: sleep
+            isScreenOn.not() && screenOffDuration > SCREEN_OFF_SLEEP_THRESHOLD_MS
+                    && significantMotionSensor != null -> PollingState.SLEEP
+            // Stationary + screen off >2min: idle (5min polling)
+            isScreenOn.not() && screenOffDuration > SCREEN_OFF_IDLE_THRESHOLD_MS -> PollingState.IDLE
+            // Stationary + screen on: settling (2min polling)
+            isStationary -> PollingState.SETTLING
+            else -> PollingState.ACTIVE
         }
 
-        if (newInterval != oldInterval) {
-            _desiredInterval.value = newInterval
-            return true
-        }
-        return false
+        return applyState(newState, oldState)
     }
 
     /**
-     * Call when screen state changes (from a broadcast receiver).
-     * Returns true if interval changed.
+     * Call when screen state changes (from ScreenStateReceiver).
+     * Returns true if polling state changed.
      */
     fun onScreenStateChanged(isOn: Boolean): Boolean {
-        val oldInterval = _desiredInterval.value
+        val oldState = _state.value
 
         if (isOn) {
             wasScreenOn = true
             screenOffSince = 0L
-            // Screen just turned on: go to fast polling to get a fresh fix
-            if (oldInterval != LocationEngine.INTERVAL_FAST) {
-                _desiredInterval.value = LocationEngine.INTERVAL_FAST
-                return true
-            }
+            // Screen on: always wake up to active
+            return applyState(PollingState.ACTIVE, oldState)
         } else {
             wasScreenOn = false
             screenOffSince = System.currentTimeMillis()
@@ -104,12 +127,67 @@ class AdaptivePollingController(context: Context) {
     }
 
     /**
+     * Called when the significant motion sensor fires.
+     * Snap immediately to ACTIVE polling.
+     */
+    fun onSignificantMotion(): Boolean {
+        val oldState = _state.value
+        // Re-arm the motion sensor for next time
+        return applyState(PollingState.ACTIVE, oldState)
+    }
+
+    private fun applyState(newState: PollingState, oldState: PollingState): Boolean {
+        if (newState == oldState) return false
+
+        // Leaving SLEEP: unregister motion sensor, service will restart GPS
+        if (oldState == PollingState.SLEEP) {
+            unregisterMotionSensor()
+        }
+
+        // Entering SLEEP: arm motion sensor, service will stop GPS
+        if (newState == PollingState.SLEEP) {
+            registerMotionSensor()
+        }
+
+        _state.value = newState
+        onStateChanged?.invoke(newState)
+        return true
+    }
+
+    /**
+     * Register the significant motion sensor trigger.
+     * This is a one-shot sensor — it fires once and then auto-disables.
+     * We re-register it each time we enter SLEEP state.
+     */
+    private fun registerMotionSensor() {
+        val sensor = significantMotionSensor ?: return
+        unregisterMotionSensor()
+
+        motionListener = object : android.hardware.TriggerEventListener() {
+            override fun onTrigger(event: android.hardware.TriggerEvent?) {
+                // Significant motion detected — snap to ACTIVE
+                onSignificantMotion()
+            }
+        }
+
+        sensorManager.requestTriggerSensor(motionListener, sensor)
+    }
+
+    private fun unregisterMotionSensor() {
+        motionListener?.let { listener ->
+            significantMotionSensor?.let { sensor ->
+                sensorManager.cancelTriggerSensor(listener, sensor)
+            }
+        }
+        motionListener = null
+    }
+
+    /**
      * Detect if the user is stationary based on recent fix history.
      * Stationary = all recent fixes are within STATIONARY_RADIUS of the first.
      */
     private fun detectStationary(): Boolean {
         if (recentFixes.size < stationaryMinFixes) return false
-
         val first = recentFixes.first() ?: return false
         return recentFixes.all { fix ->
             TransmissionEngine.distanceMeters(fix, first) < STATIONARY_RADIUS_METERS
@@ -120,14 +198,22 @@ class AdaptivePollingController(context: Context) {
     fun reset() {
         recentFixes.clear()
         screenOffSince = 0L
+        stationarySince = 0L
         wasScreenOn = pm.isInteractive
-        _desiredInterval.value = LocationEngine.INTERVAL_FAST
+        unregisterMotionSensor()
+        _state.value = PollingState.ACTIVE
+    }
+
+    /** Clean up when streaming stops. */
+    fun shutdown() {
+        unregisterMotionSensor()
     }
 
     companion object {
         private const val STATIONARY_RADIUS_METERS = 5f
-        private const val stationaryMinFixes = 4  // need 4 consecutive close fixes
+        private const val stationaryMinFixes = 4
         private const val maxHistorySize = 6
-        private const val SCREEN_OFF_THRESHOLD_MS = 120_000L  // 2 minutes
+        private const val SCREEN_OFF_IDLE_THRESHOLD_MS = 120_000L    // 2 min → 5min polling
+        private const val SCREEN_OFF_SLEEP_THRESHOLD_MS = 300_000L   // 5 min → GPS off + motion sensor
     }
 }

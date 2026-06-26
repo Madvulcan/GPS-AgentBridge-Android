@@ -45,8 +45,8 @@ Two signed release builds are available — choose based on your device:
 
 | APK | Size | Google Play Services | Best for |
 |-----|------|---------------------|----------|
-| [`gps-agent-bridge-v1.2.0-standard-release.apk`](gps-agent-bridge-v1.2.0-standard-release.apk) | ~2 MB | ✅ Required | Most Android devices (better battery, sensor fusion) |
-| [`gps-agent-bridge-v1.2.0-fdroid-release.apk`](gps-agent-bridge-v1.2.0-fdroid-release.apk) | ~1.5 MB | ❌ Not needed | De-Googled devices (LineageOS, GrapheneOS, F-Droid users) |
+| [`gps-agent-bridge-v1.3.0-standard-release.apk`](gps-agent-bridge-v1.3.0-standard-release.apk) | ~2 MB | ✅ Required | Most Android devices (better battery, sensor fusion) |
+| [`gps-agent-bridge-v1.3.0-fdroid-release.apk`](gps-agent-bridge-v1.3.0-fdroid-release.apk) | ~1.5 MB | ❌ Not needed | De-Googled devices (LineageOS, GrapheneOS, F-Droid users) |
 
 **Which one should I use?**
 
@@ -55,8 +55,8 @@ Two signed release builds are available — choose based on your device:
 
 Install via ADB:
 ```bash
-adb install gps-agent-bridge-v1.2.0-standard-release.apk    # with Play Services (recommended)
-adb install gps-agent-bridge-v1.2.0-fdroid-release.apk       # without Play Services (FLOSS)
+adb install gps-agent-bridge-v1.3.0-standard-release.apk    # with Play Services (recommended)
+adb install gps-agent-bridge-v1.3.0-fdroid-release.apk       # without Play Services (FLOSS)
 ```
 
 Or transfer the file to your phone and install from the file manager.
