@@ -1,5 +1,12 @@
 
 
+### v1.3.1 (2026-06-26)
+
+Bug fix:
+- **Notification permission added to onboarding** — On Android 13+, the POST_NOTIFICATIONS permission is required for the foreground service notification to appear. Without it, the streaming service runs but the notification is silently blocked. Added a new onboarding step between location permission and battery optimization that requests notification permission explicitly. Also uses hasNotificationPermission() check in PermissionHelper.
+
+
+
 ### v1.3.0 (2026-06-26)
 
 Deep sleep battery optimization with significant motion sensor:

@@ -1,6 +1,8 @@
 package com.madvulcan.gpsagentbridge.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +47,7 @@ import com.madvulcan.gpsagentbridge.util.BackgroundLocationState
 import com.madvulcan.gpsagentbridge.util.BatteryOptimizationHelper
 import com.madvulcan.gpsagentbridge.util.backgroundLocationState
 import com.madvulcan.gpsagentbridge.util.hasAnyLocationPermission
+import com.madvulcan.gpsagentbridge.util.hasNotificationPermission
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,12 +57,14 @@ fun OnboardingScreen(onDone: () -> Unit) {
     var hasLocation by remember { mutableStateOf(hasAnyLocationPermission(context)) }
     var bgState by remember { mutableStateOf(backgroundLocationState(context)) }
     var batteryOpt by remember { mutableStateOf(BatteryOptimizationHelper.isBatteryOptimizationEnabled(context)) }
+    var hasNotif by remember { mutableStateOf(hasNotificationPermission(context)) }
 
     // Re-check on every recomposition trigger
     LaunchedEffect(Unit) {
         hasLocation = hasAnyLocationPermission(context)
         bgState = backgroundLocationState(context)
         batteryOpt = BatteryOptimizationHelper.isBatteryOptimizationEnabled(context)
+        hasNotif = hasNotificationPermission(context)
     }
 
     val locationLauncher = rememberLauncherForActivityResult(
@@ -80,6 +85,14 @@ fun OnboardingScreen(onDone: () -> Unit) {
     ) {
         batteryOpt = BatteryOptimizationHelper.isBatteryOptimizationEnabled(context)
     }
+
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        hasNotif = hasNotificationPermission(context)
+    }
+
+    val allDone = hasLocation && bgState == BackgroundLocationState.GRANTED && !batteryOpt && hasNotif
 
     Scaffold(
         topBar = {
@@ -122,7 +135,19 @@ fun OnboardingScreen(onDone: () -> Unit) {
                 },
             )
 
-            // ---- Step 2: Battery optimization ----
+            // ---- Step 2: Notification permission ----
+            OnboardingCard(
+                title = "Allow notifications",
+                description = "The streaming service needs to show a persistent notification. Without this permission, the service can't run in the background and GPS updates will stop. On Android 13+, apps must ask for notification permission explicitly.",
+                isDone = hasNotif,
+                actionLabel = if (!hasNotif) "Allow notifications" else null,
+                onAction = {
+                    // On Android 13+ we can request the permission directly
+                    notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                },
+            )
+
+            // ---- Step 3: Battery optimization ----
             OnboardingCard(
                 title = stringResource(R.string.onboarding_step_battery),
                 description = stringResource(R.string.onboarding_step_battery_desc),
@@ -139,7 +164,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             OnboardingCard(
                 title = stringResource(R.string.onboarding_step_done),
                 description = stringResource(R.string.onboarding_step_done_desc),
-                isDone = hasLocation && bgState == BackgroundLocationState.GRANTED && !batteryOpt,
+                isDone = allDone,
                 actionLabel = null,
                 onAction = {},
             )
