@@ -1,11 +1,14 @@
 package com.madvulcan.gpsagentbridge.data
 
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 /**
  * One destination server for NMEA UDP transmission.
  *
- * - [host] is a hostname or IP literal. Examples: `100.92.209.24`, `gpsd.lan`,
+ * - [id] is a unique identifier assigned on creation, stable across edits.
+ *   Used as the Compose remember key so text field state survives recomposition.
+ * - [host] is a hostname or IP literal. Examples: `100.x.x.x`, `gpsd.lan`,
  *   `192.168.1.50`.
  * - [port] is the UDP port on the destination (default 2948 — gpsd's NMEA ingest port).
  * - [label] is an optional human-readable name shown in the UI ("Home desktop",
@@ -15,6 +18,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class ServerTarget(
+    val id: String = UUID.randomUUID().toString(),
     val host: String,
     val port: Int = 2948,
     val label: String = "",
@@ -26,6 +30,6 @@ data class ServerTarget(
      */
     val displayName: String get() = label.ifBlank { "$host:$port" }
 
-    /** Stable identifier for list keys / mutableStateOf tracking. */
-    val stableId: String get() = "$host:$port:${label.hashCode()}"
+    /** Stable identifier for list keys / Compose remember tracking. */
+    val stableId: String get() = id
 }

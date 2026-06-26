@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -185,6 +186,15 @@ private fun TargetEditor(
     onChange: (ServerTarget) -> Unit,
     onDelete: () -> Unit,
 ) {
+    // Use local mutable state for text fields to prevent cursor jumping.
+    // The classic Compose bug: when the Flow emits a new Settings value,
+    // recomposition resets the TextField cursor to the end. By keeping
+    // local state, the cursor position survives recomposition. We sync
+    // back to the ViewModel when focus is lost.
+    var localLabel by remember(target.id) { mutableStateOf(target.label) }
+    var localHost by remember(target.id) { mutableStateOf(target.host) }
+    var localPort by remember(target.id) { mutableStateOf(target.port.toString()) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -192,8 +202,11 @@ private fun TargetEditor(
     ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = target.label,
-                onValueChange = { onChange(target.copy(label = it)) },
+                value = localLabel,
+                onValueChange = {
+                    localLabel = it
+                    onChange(target.copy(label = it.trim()))
+                },
                 label = { Text(stringResource(R.string.settings_target_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -203,16 +216,27 @@ private fun TargetEditor(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedTextField(
-                    value = target.host,
-                    onValueChange = { onChange(target.copy(host = it.trim())) },
+                    value = localHost,
+                    onValueChange = {
+                        localHost = it
+                        onChange(target.copy(host = it.trim()))
+                    },
                     label = { Text(stringResource(R.string.settings_target_host)) },
-                    modifier = Modifier.weight(2f),
+                    modifier = Modifier
+                        .weight(2f)
+                        .onFocusChanged { focusState ->
+                            // Sync on focus lost to ensure final value is saved
+                            if (!focusState.isFocused && localHost != target.host) {
+                                onChange(target.copy(host = localHost.trim()))
+                            }
+                        },
                     singleLine = true,
                 )
                 OutlinedTextField(
-                    value = target.port.toString(),
-                    onValueChange = { v ->
-                        v.toIntOrNull()?.let { p ->
+                    value = localPort,
+                    onValueChange = { input ->
+                        localPort = input.filter { it.isDigit() }
+                        localPort.toIntOrNull()?.let { p ->
                             if (p in 1..65535) onChange(target.copy(port = p))
                         }
                     },

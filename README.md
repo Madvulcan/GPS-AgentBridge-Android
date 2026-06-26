@@ -229,6 +229,7 @@ Based on estimates — not yet measured on real hardware. Contributions welcome.
 ### v1.2.0 (2026-06-25)
 
 Battery optimization with adaptive GPS polling:
+- **Fixed: text input cursor bug** — First character of IP address was pushed to end when typing in the host field. Classic Compose TextField recomposition bug: the DataStore Flow emit during editing reset cursor position. Fixed by using local mutable state for text fields and adding a stable `id` field to `ServerTarget` so the `remember` key doesn't change during edits.
 - **Adaptive polling interval** — When stationary (all recent fixes within 5m), GPS polling gradually backs off from 30s → 2min → 5min. On movement, snaps back to 30s immediately. Reduces GPS radio duty cycle by 3-5x when stationary — the single biggest battery improvement available.
 - **Screen-off throttle** — When the phone screen is off for >2 minutes, GPS polling slows to 5min intervals. Screen on → snaps back to active polling. Catches the common case of pocketing your phone while streaming.
 - **AdaptivePollingController** — New component that combines movement detection and screen state to dynamically adjust the `LocationEngine` polling interval. The service restarts location collection whenever the interval changes.
